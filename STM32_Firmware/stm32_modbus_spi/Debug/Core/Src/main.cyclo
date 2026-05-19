@@ -1,0 +1,11 @@
+../Core/Src/main.cpp:79:5:int main()	1
+../Core/Src/main.cpp:128:6:void SystemClock_Config()	3
+../Core/Src/main.cpp:168:13:void MX_IWDG_Init()	2
+../Core/Src/main.cpp:196:13:void MX_SPI1_Init()	2
+../Core/Src/main.cpp:234:13:void MX_TIM2_Init()	4
+../Core/Src/main.cpp:279:13:void MX_USART1_UART_Init()	2
+../Core/Src/main.cpp:312:13:void MX_GPIO_Init()	1
+../Core/Src/main.cpp:360:6:void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef*)	3
+../Core/Src/main.cpp:375:6:void Error_Handler()	1
+../Core/Src/main.cpp:384:1:void __static_initialization_and_destruction_0()	1
+../Core/Src/main.cpp:384:1:cpp)	1

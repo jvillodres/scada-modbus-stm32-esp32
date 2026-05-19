@@ -1,0 +1,4 @@
+../Libraries/RS485/Src/rs485.c:17:6:setTX	8	static
+../Libraries/RS485/Src/rs485.c:25:6:setRX	8	static
+../Libraries/RS485/Src/rs485.c:39:19:sendBytes	32	static
+../Libraries/RS485/Src/rs485.c:62:19:recvBytes	24	static

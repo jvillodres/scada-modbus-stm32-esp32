@@ -1,0 +1,9 @@
+../Libraries/Modbus/Src/modbus.cpp:24:1:Modbus::Modbus(uint8_t)	16	static
+../Libraries/Modbus/Src/modbus.cpp:32:6:void Modbus::setRole(uint8_t)	16	static
+../Libraries/Modbus/Src/modbus.cpp:41:9:uint8_t Modbus::getRole()	16	static
+../Libraries/Modbus/Src/modbus.cpp:50:6:void Modbus::handle()	40	static
+../Libraries/Modbus/Src/modbus.cpp:109:18:)	12	static
+../Libraries/Modbus/Src/modbus.cpp:125:18:MB_StatusTypeDef Modbus::sendFC(uint8_t, uint8_t, uint16_t, uint16_t, uint16_t, uint16_t*)	24	static
+../Libraries/Modbus/Src/modbus.cpp:192:18:MB_StatusTypeDef Modbus::sendException(uint8_t, uint8_t)	24	static
+../Libraries/Modbus/Src/modbus.cpp:215:17:uint16_t calculateCRC(const uint8_t*, uint16_t)	32	static
+../Libraries/Modbus/Src/modbus.cpp:238:25:MB_StatusTypeDef verifyCRC(const uint8_t*, uint16_t)	24	static
