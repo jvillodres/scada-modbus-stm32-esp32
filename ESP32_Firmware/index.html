@@ -1,10 +1,224 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Title</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SCADA - Banda Transportadora</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            color: #00d4ff;
+            margin-bottom: 20px;
+            font-size: 1.4em;
+            letter-spacing: 2px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            max-width: 600px;
+            margin: auto;
+        }
+        .card {
+            background: #16213e;
+            border-radius: 10px;
+            padding: 15px;
+            border: 1px solid #0f3460;
+        }
+        .card h3 {
+            font-size: 0.75em;
+            color: #888;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+            letter-spacing: 1px;
+        }
+        /* Indicadores */
+        .value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #00d4ff;
+        }
+        .unit { font-size: 0.8em; color: #888; }
+        /* LED */
+        .led {
+            width: 30px; height: 30px;
+            border-radius: 50%;
+            background: #333;
+            border: 2px solid #555;
+            transition: background 0.3s;
+        }
+        .led.on { background: #00ff88; box-shadow: 0 0 10px #00ff88; }
+        .led.alarm { background: #ff4444; box-shadow: 0 0 10px #ff4444; }
+        /* Controles */
+        .btn {
+            padding: 8px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            margin: 4px;
+            transition: opacity 0.2s;
+        }
+        .btn:active { opacity: 0.7; }
+        .btn-on  { background: #00ff88; color: #000; }
+        .btn-off { background: #ff4444; color: #fff; }
+        .slider-container { margin-top: 8px; }
+        input[type=range] {
+            width: 100%;
+            accent-color: #00d4ff;
+        }
+        .slider-val { color: #00d4ff; font-weight: bold; }
+        /* Status bar */
+        #status {
+            text-align: center;
+            margin-top: 15px;
+            font-size: 0.75em;
+            color: #555;
+        }
+    </style>
 </head>
 <body>
+
+<h1>⚙ SCADA — BANDA TRANSPORTADORA</h1>
+
+<div class="grid">
+
+    <!-- Motor -->
+    <div class="card">
+        <h3>Motor Banda</h3>
+        <div class="led" id="led-motor"></div>
+        <br>
+        <button class="btn btn-on"  onclick="setReg('motor', 1)">ON</button>
+        <button class="btn btn-off" onclick="setReg('motor', 0)">OFF</button>
+    </div>
+
+    <!-- Brazo -->
+    <div class="card">
+        <h3>Brazo Clasificador</h3>
+        <div class="led" id="led-brazo"></div>
+        <br>
+        <button class="btn btn-on"  onclick="setReg('brazo', 1)">ON</button>
+        <button class="btn btn-off" onclick="setReg('brazo', 0)">OFF</button>
+    </div>
+
+    <!-- Velocidad -->
+    <div class="card" style="grid-column: span 2;">
+        <h3>Velocidad Motor</h3>
+        <div class="slider-container">
+            <input type="range" min="0" max="100" value="0"
+                   id="slider-vel"
+                   oninput="updateSlider(this.value)"
+                   onchange="setReg('velocidad', this.value)">
+            <span class="slider-val" id="vel-val">0</span>
+            <span class="unit">%</span>
+        </div>
+    </div>
+
+    <!-- Sensor presencia -->
+    <div class="card">
+        <h3>Sensor Presencia</h3>
+        <div class="led" id="led-presencia"></div>
+    </div>
+
+    <!-- Alarma -->
+    <div class="card">
+        <h3>Sobrecalentamiento</h3>
+        <div class="led" id="led-alarma"></div>
+    </div>
+
+    <!-- Temperatura -->
+    <div class="card">
+        <h3>Temperatura</h3>
+        <div class="value" id="val-temp">--</div>
+        <span class="unit">°C</span>
+    </div>
+
+    <!-- Contador -->
+    <div class="card">
+        <h3>Contador Piezas</h3>
+        <div class="value" id="val-contador">--</div>
+        <span class="unit">piezas</span>
+    </div>
+
+</div>
+
+<div id="status">Conectando...</div>
+
+<script>
+    // ── Actualizar UI con datos del servidor ──────────────────────
+    function updateUI(data) {
+        // LEDs
+        setLed("led-motor",    data.motor,    false);
+        setLed("led-brazo",    data.brazo,    false);
+        setLed("led-presencia",data.presencia,false);
+        setLed("led-alarma",   data.alarma,   true);
+
+        // Slider velocidad — solo actualiza si el usuario no lo está tocando
+        if (!sliderActive) {
+            document.getElementById("slider-vel").value = data.velocidad;
+            document.getElementById("vel-val").textContent = data.velocidad;
+        }
+
+        // Valores numéricos
+        document.getElementById("val-temp").textContent     = data.temperatura;
+        document.getElementById("val-contador").textContent = data.contador;
+    }
+
+    function setLed(id, value, isAlarm) {
+        const el = document.getElementById(id);
+        el.className = "led";
+        if (value) el.classList.add(isAlarm ? "alarm" : "on");
+    }
+
+    // ── Polling cada 500ms ────────────────────────────────────────
+    async function poll() {
+        try {
+            const res  = await fetch("/data");
+            const data = await res.json();
+            updateUI(data);
+            document.getElementById("status").textContent =
+                "Conectado · " + new Date().toLocaleTimeString();
+        } catch(e) {
+            document.getElementById("status").textContent = "Sin conexión...";
+        }
+    }
+    setInterval(poll, 500);
+    poll();
+
+    // ── Enviar cambio al servidor ─────────────────────────────────
+    async function setReg(key, value) {
+        const body = {};
+        body[key] = parseInt(value);
+        try {
+            await fetch("/set", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body)
+            });
+        } catch(e) {
+            console.error("Error enviando:", e);
+        }
+    }
+
+    // ── Control del slider ────────────────────────────────────────
+    let sliderActive = false;
+    const slider = document.getElementById("slider-vel");
+    slider.addEventListener("mousedown",  () => sliderActive = true);
+    slider.addEventListener("touchstart", () => sliderActive = true);
+    slider.addEventListener("mouseup",    () => sliderActive = false);
+    slider.addEventListener("touchend",   () => sliderActive = false);
+
+    function updateSlider(val) {
+        document.getElementById("vel-val").textContent = val;
+    }
+</script>
 
 </body>
 </html>
