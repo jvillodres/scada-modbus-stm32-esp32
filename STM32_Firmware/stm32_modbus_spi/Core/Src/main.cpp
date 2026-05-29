@@ -21,7 +21,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "modbus.hpp"
+//#include "modbus.hpp"
+#include <cstdio>
+#include <cstring>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -49,7 +51,7 @@ TIM_HandleTypeDef htim2;
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
-Modbus mb(0); // Master mode
+//Modbus mb(0); // Master mode
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -60,16 +62,32 @@ static void MX_SPI1_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
-
+static uint8_t crc8(uint8_t *data, uint8_t len);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-// Read 7 registers from 40001
+// Read 7 registers starting on 40001
 uint16_t regs[7] = {0, 1, 2, 3, 4, 5, 6};
 
 // Value to write on registers
 uint16_t val = 1;
+
+// Buffers for SPI communication
+uint8_t spi_rx_buf[10] = {0};
+uint8_t spi_tx_buf[10] = {
+		0xBB,		// Start byte
+		0x01,		// Motor 		(Emulated ON)
+		0x3F,		// Speed 		(Emulated 63%)
+		0x00,		// Arm 	 		(Emulated OFF)
+		0x01,		// Presence		(Emulated ON)
+		0x28,		// Temperature 	(Emulated 40°C)
+		0x00,		// Counter Hi
+		0x05,		// Counter Lo	(Emulated 5 pieces)
+		0x00,		// Alarm		(Emulated OFF)
+		0x00		// CRC
+};
+
 /* USER CODE END 0 */
 
 /**
@@ -107,11 +125,14 @@ int main(void)
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_Base_Start_IT(&htim2);
+
+  spi_tx_buf[9] = crc8(&spi_tx_buf[1], 8);
+  HAL_SPI_TransmitReceive_IT(&hspi1, spi_tx_buf, spi_rx_buf, 10);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  mb.sendFC(0x01, MB_FC_WRITE_MULTI, 0x00, 0x07, 0x00, regs); // Write multi registers
+//  mb.sendFC(0x01, MB_FC_WRITE_MULTI, 0x00, 0x07, 0x00, regs); // Write multi registers
   while (1)
   {
     /* USER CODE END WHILE */
@@ -205,13 +226,12 @@ static void MX_SPI1_Init(void)
   /* USER CODE END SPI1_Init 1 */
   /* SPI1 parameter configuration*/
   hspi1.Instance = SPI1;
-  hspi1.Init.Mode = SPI_MODE_MASTER;
+  hspi1.Init.Mode = SPI_MODE_SLAVE;
   hspi1.Init.Direction = SPI_DIRECTION_2LINES;
   hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
-  hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_4;
+  hspi1.Init.NSS = SPI_NSS_HARD_INPUT;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -325,7 +345,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(Keep_Alive_GPIO_Port, Keep_Alive_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(SPI1_DRDY_GPIO_Port, SPI1_DRDY_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(USART1_XE_GPIO_Port, USART1_XE_Pin, GPIO_PIN_RESET);
@@ -337,12 +357,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(Keep_Alive_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : SPI1_CS_Pin */
-  GPIO_InitStruct.Pin = SPI1_CS_Pin;
+  /*Configure GPIO pin : SPI1_DRDY_Pin */
+  GPIO_InitStruct.Pin = SPI1_DRDY_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(SPI1_CS_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(SPI1_DRDY_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : USART1_XE_Pin */
   GPIO_InitStruct.Pin = USART1_XE_Pin;
@@ -357,12 +377,43 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+static uint8_t crc8(uint8_t *data, uint8_t len) {
+	uint8_t crc = 0;
+	for (int i = 0; i < len; i++) {
+		crc ^= data[i];
+	}
+	return crc;
+}
+
+void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi) {
+	if (hspi->Instance == SPI1) {
+
+		// Verify received frame from ESP32
+		if (spi_rx_buf[0] == 0xAA) {
+			uint8_t calc = crc8(&spi_rx_buf[1], 8);
+
+			if (calc == spi_rx_buf[9]) {
+				char msg[80];
+				sprintf(msg,
+						"SCADA->STM32: motor=%d vel=%d arm=%d\r\n",
+						spi_rx_buf[1], spi_rx_buf[2], spi_rx_buf[3]);
+
+				HAL_UART_Transmit(&huart1, (uint8_t*)msg, strlen(msg), 100);
+			}
+		}
+
+		// Recalculate CRC and arm next transaction
+		spi_tx_buf[9] = crc8(&spi_tx_buf[1], 8);
+		HAL_SPI_TransmitReceive_IT(&hspi1, spi_tx_buf, spi_rx_buf, 10);
+	}
+}
+
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 	if (htim->Instance == TIM2) {
 		HAL_GPIO_TogglePin(Keep_Alive_GPIO_Port, Keep_Alive_Pin);
 
-		mb.sendFC(0x01, MB_FC_READ_REGS, 0x00, 0x07, 0x00, regs); // Read all registers
-		mb.sendFC(0x01, MB_FC_WRITE_SINGLE, 0x00, 0x07, 0x02, &val); // Write a single register (41002)
+//		mb.sendFC(0x01, MB_FC_READ_REGS, 0x00, 0x07, 0x00, regs); // Read all registers
+//		mb.sendFC(0x01, MB_FC_WRITE_SINGLE, 0x00, 0x07, 0x02, &val); // Write a single register (41002)
 
 		if (HAL_IWDG_Refresh(&hiwdg) != HAL_OK) {
 			Error_Handler();

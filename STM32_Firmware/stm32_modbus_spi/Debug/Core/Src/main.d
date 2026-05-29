@@ -25,10 +25,7 @@ Core/Src/main.o: ../Core/Src/main.cpp ../Core/Inc/main.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_spi.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_tim.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_tim_ex.h \
- ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_uart.h \
- C:/Users/Asus/Documents/Universidad/UTP/Sistemas\ Embebidos/scada-modbus-stm32-esp32/STM32_Firmware/stm32_modbus_spi/Libraries/Modbus/Inc/modbus.hpp \
- C:/Users/Asus/Documents/Universidad/UTP/Sistemas\ Embebidos/scada-modbus-stm32-esp32/STM32_Firmware/stm32_modbus_spi/Libraries/RS485/Inc/rs485.h \
- C:/Users/Asus/Documents/Universidad/UTP/Sistemas\ Embebidos/scada-modbus-stm32-esp32/STM32_Firmware/stm32_modbus_spi/Libraries/RS485/Inc/rs485_conf_io.h
+ ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_uart.h
 ../Core/Inc/main.h:
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal.h:
 ../Core/Inc/stm32f1xx_hal_conf.h:
@@ -57,6 +54,3 @@ Core/Src/main.o: ../Core/Src/main.cpp ../Core/Inc/main.h \
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_tim.h:
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_tim_ex.h:
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_uart.h:
-C:/Users/Asus/Documents/Universidad/UTP/Sistemas\ Embebidos/scada-modbus-stm32-esp32/STM32_Firmware/stm32_modbus_spi/Libraries/Modbus/Inc/modbus.hpp:
-C:/Users/Asus/Documents/Universidad/UTP/Sistemas\ Embebidos/scada-modbus-stm32-esp32/STM32_Firmware/stm32_modbus_spi/Libraries/RS485/Inc/rs485.h:
-C:/Users/Asus/Documents/Universidad/UTP/Sistemas\ Embebidos/scada-modbus-stm32-esp32/STM32_Firmware/stm32_modbus_spi/Libraries/RS485/Inc/rs485_conf_io.h:
