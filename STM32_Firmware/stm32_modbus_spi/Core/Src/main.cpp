@@ -77,9 +77,9 @@ uint16_t val = 1;
 uint8_t spi_rx_buf[10] = {0};
 uint8_t spi_tx_buf[10] = {
 		0xBB,		// Start byte
-		0x01,		// Motor 		(Emulated ON)
-		0x3F,		// Speed 		(Emulated 63%)
-		0x00,		// Arm 	 		(Emulated OFF)
+		0x00,		// Motor
+		0x00,		// Speed
+		0x00,		// Arm
 		0x01,		// Presence		(Emulated ON)
 		0x28,		// Temperature 	(Emulated 40°C)
 		0x00,		// Counter Hi
@@ -393,10 +393,15 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi) {
 			uint8_t calc = crc8(&spi_rx_buf[1], 8);
 
 			if (calc == spi_rx_buf[9]) {
+
+				if (spi_rx_buf[1] != 0xFF) spi_tx_buf[1] = spi_rx_buf[1]; // Motor
+				if (spi_rx_buf[2] != 0xFF) spi_tx_buf[2] = spi_rx_buf[2]; // Speed
+				if (spi_rx_buf[3] != 0xFF) spi_tx_buf[3] = spi_rx_buf[3]; // Arm
+
 				char msg[80];
 				sprintf(msg,
 						"SCADA->STM32: motor=%d vel=%d arm=%d\r\n",
-						spi_rx_buf[1], spi_rx_buf[2], spi_rx_buf[3]);
+						spi_tx_buf[1], spi_tx_buf[2], spi_tx_buf[3]);
 
 				HAL_UART_Transmit(&huart1, (uint8_t*)msg, strlen(msg), 100);
 			}

@@ -6,6 +6,6 @@
 ../Core/Src/main.cpp:299:13:void MX_USART1_UART_Init()	2
 ../Core/Src/main.cpp:332:13:void MX_GPIO_Init()	1
 ../Core/Src/main.cpp:380:16:uint8_t crc8(uint8_t*, uint8_t)	2
-../Core/Src/main.cpp:388:6:void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef*)	4
-../Core/Src/main.cpp:411:6:void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef*)	3
-../Core/Src/main.cpp:429:6:void Error_Handler()	1
+../Core/Src/main.cpp:388:6:void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef*)	7
+../Core/Src/main.cpp:416:6:void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef*)	3
+../Core/Src/main.cpp:434:6:void Error_Handler()	1
