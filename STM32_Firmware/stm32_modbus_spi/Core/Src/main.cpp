@@ -21,7 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-//#include "modbus.hpp"
+#include "modbus.hpp"
 #include <cstdio>
 #include <cstring>
 /* USER CODE END Includes */
@@ -33,7 +33,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define NUM_REGS		7
+#define SLAVE_ADDR		0x01
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -46,12 +47,13 @@ IWDG_HandleTypeDef hiwdg;
 
 SPI_HandleTypeDef hspi1;
 
+TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
 
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
-//Modbus mb(0); // Master mode
+Modbus mb(0); // Master mode
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -61,33 +63,37 @@ static void MX_IWDG_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_USART1_UART_Init(void);
+static void MX_TIM1_Init(void);
 /* USER CODE BEGIN PFP */
 static uint8_t crc8(uint8_t *data, uint8_t len);
+static void update_spi_tx_buf(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-// Read 7 registers starting on 40001
-uint16_t regs[7] = {0, 1, 2, 3, 4, 5, 6};
+// PLC registers starting on 40001
+uint16_t mb_regs[NUM_REGS] = {0};
 
-// Value to write on registers
-uint16_t val = 1;
-
-// Buffers for SPI communication
+// SPI Buffers
 uint8_t spi_rx_buf[10] = {0};
 uint8_t spi_tx_buf[10] = {
 		0xBB,		// Start byte
 		0x00,		// Motor
 		0x00,		// Speed
 		0x00,		// Arm
-		0x01,		// Presence		(Emulated ON)
-		0x28,		// Temperature 	(Emulated 40°C)
+		0x00,		// Presence		(Emulated ON)
+		0x00,		// Temperature 	(Emulated 40°C)
 		0x00,		// Counter Hi
-		0x05,		// Counter Lo	(Emulated 5 pieces)
+		0x00,		// Counter Lo	(Emulated 5 pieces)
 		0x00,		// Alarm		(Emulated OFF)
 		0x00		// CRC
 };
 
+// Pending changes from SCADA to PLC
+volatile uint8_t pending_flag = 0x00;
+volatile uint8_t pending_motor = 0x00;
+volatile uint8_t pending_speed = 0x00;
+volatile uint8_t pending_arm = 0x00;
 /* USER CODE END 0 */
 
 /**
@@ -123,7 +129,9 @@ int main(void)
   MX_SPI1_Init();
   MX_TIM2_Init();
   MX_USART1_UART_Init();
+  MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
+  HAL_TIM_Base_Start_IT(&htim1);
   HAL_TIM_Base_Start_IT(&htim2);
 
   spi_tx_buf[9] = crc8(&spi_tx_buf[1], 8);
@@ -132,12 +140,40 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-//  mb.sendFC(0x01, MB_FC_WRITE_MULTI, 0x00, 0x07, 0x00, regs); // Write multi registers
+  uint32_t now = HAL_GetTick();
   while (1)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	if ((HAL_GetTick() - now) >= 200) {
+		now = HAL_GetTick();
+		if (pending_flag) {
+			uint16_t val;
+
+			if (pending_motor != 0xFF) {
+				val = pending_motor;
+				mb.sendFC(SLAVE_ADDR, MB_FC_WRITE_SINGLE, 0, 1, 0, &val);
+			}
+			if (pending_speed != 0xFF) {
+				val = pending_speed;
+				mb.sendFC(SLAVE_ADDR, MB_FC_WRITE_SINGLE, 0, 1, 1, &val);
+			}
+			if (pending_arm != 0xFF) {
+				val = pending_arm;
+				mb.sendFC(SLAVE_ADDR, MB_FC_WRITE_SINGLE, 0, 1, 2, &val);
+			}
+
+			pending_motor = pending_speed = pending_arm = 0xFF;
+			pending_flag = 0x00;
+		}
+
+		MB_StatusTypeDef st = mb.sendFC(SLAVE_ADDR, MB_FC_READ_REGS, 0, NUM_REGS, 0, mb_regs);
+
+		if (st == MB_OK) {
+			update_spi_tx_buf();
+		}
+	}
   }
   /* USER CODE END 3 */
 }
@@ -247,6 +283,52 @@ static void MX_SPI1_Init(void)
 }
 
 /**
+  * @brief TIM1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM1_Init(void)
+{
+
+  /* USER CODE BEGIN TIM1_Init 0 */
+
+  /* USER CODE END TIM1_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM1_Init 1 */
+
+  /* USER CODE END TIM1_Init 1 */
+  htim1.Instance = TIM1;
+  htim1.Init.Prescaler = 1279;
+  htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim1.Init.Period = 10000;
+  htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim1.Init.RepetitionCounter = 0;
+  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim1, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM1_Init 2 */
+
+  /* USER CODE END TIM1_Init 2 */
+
+}
+
+/**
   * @brief TIM2 Initialization Function
   * @param None
   * @retval None
@@ -339,13 +421,9 @@ static void MX_GPIO_Init(void)
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
-  __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(Keep_Alive_GPIO_Port, Keep_Alive_Pin, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(SPI1_DRDY_GPIO_Port, SPI1_DRDY_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(USART1_XE_GPIO_Port, USART1_XE_Pin, GPIO_PIN_RESET);
@@ -356,13 +434,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(Keep_Alive_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : SPI1_DRDY_Pin */
-  GPIO_InitStruct.Pin = SPI1_DRDY_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(SPI1_DRDY_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : USART1_XE_Pin */
   GPIO_InitStruct.Pin = USART1_XE_Pin;
@@ -385,6 +456,26 @@ static uint8_t crc8(uint8_t *data, uint8_t len) {
 	return crc;
 }
 
+static void update_spi_tx_buf(void) {
+
+	uint8_t tmp[10];
+
+	tmp[0] = 0xBB;
+	tmp[1] = (uint8_t) mb_regs[0];				// motor
+	tmp[2] = (uint8_t) mb_regs[1];				// speed
+	tmp[3] = (uint8_t) mb_regs[2];				// arm
+	tmp[4] = (uint8_t) mb_regs[3];				// presence
+	tmp[5] = (uint8_t) mb_regs[4];				// temperature
+	tmp[6] = (uint8_t) (mb_regs[5] >> 8);		// count hi
+	tmp[7] = (uint8_t) (mb_regs[5] & 0xFF);		// count lo
+	tmp[8] = (uint8_t) mb_regs[6];				// overheat
+	tmp[9] = crc8(&spi_tx_buf[1], 8);
+
+	HAL_NVIC_DisableIRQ(SPI1_IRQn);
+	memcpy(spi_tx_buf, tmp, 10);
+	HAL_NVIC_EnableIRQ(SPI1_IRQn);
+}
+
 void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi) {
 	if (hspi->Instance == SPI1) {
 
@@ -394,35 +485,31 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi) {
 
 			if (calc == spi_rx_buf[9]) {
 
-				if (spi_rx_buf[1] != 0xFF) spi_tx_buf[1] = spi_rx_buf[1]; // Motor
-				if (spi_rx_buf[2] != 0xFF) spi_tx_buf[2] = spi_rx_buf[2]; // Speed
-				if (spi_rx_buf[3] != 0xFF) spi_tx_buf[3] = spi_rx_buf[3]; // Arm
+				if (spi_rx_buf[1] != 0xFF) pending_motor = spi_rx_buf[1]; // Motor
+				if (spi_rx_buf[2] != 0xFF) pending_speed = spi_rx_buf[2]; // Speed
+				if (spi_rx_buf[3] != 0xFF) pending_arm = spi_rx_buf[3]; // Arm
 
-				char msg[80];
-				sprintf(msg,
-						"SCADA->STM32: motor=%d vel=%d arm=%d\r\n",
-						spi_tx_buf[1], spi_tx_buf[2], spi_tx_buf[3]);
-
-				HAL_UART_Transmit(&huart1, (uint8_t*)msg, strlen(msg), 100);
+				if (spi_rx_buf[1] != 0xFF || spi_rx_buf[2] != 0xFF || spi_rx_buf[3] != 0xFF) {
+					pending_flag = 0x01;
+				}
 			}
 		}
 
 		// Recalculate CRC and arm next transaction
-		spi_tx_buf[9] = crc8(&spi_tx_buf[1], 8);
 		HAL_SPI_TransmitReceive_IT(&hspi1, spi_tx_buf, spi_rx_buf, 10);
 	}
 }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
-	if (htim->Instance == TIM2) {
+	if (htim->Instance == TIM1) {
 		HAL_GPIO_TogglePin(Keep_Alive_GPIO_Port, Keep_Alive_Pin);
+	}
 
-//		mb.sendFC(0x01, MB_FC_READ_REGS, 0x00, 0x07, 0x00, regs); // Read all registers
-//		mb.sendFC(0x01, MB_FC_WRITE_SINGLE, 0x00, 0x07, 0x02, &val); // Write a single register (41002)
-
+	if (htim->Instance == TIM2) {
 		if (HAL_IWDG_Refresh(&hiwdg) != HAL_OK) {
 			Error_Handler();
 		}
+
 	}
 }
 /* USER CODE END 4 */

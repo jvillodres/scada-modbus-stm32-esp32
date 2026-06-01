@@ -59,8 +59,6 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 #define Keep_Alive_Pin GPIO_PIN_13
 #define Keep_Alive_GPIO_Port GPIOC
-#define SPI1_DRDY_Pin GPIO_PIN_0
-#define SPI1_DRDY_GPIO_Port GPIOB
 #define USART1_XE_Pin GPIO_PIN_8
 #define USART1_XE_GPIO_Port GPIOA
 

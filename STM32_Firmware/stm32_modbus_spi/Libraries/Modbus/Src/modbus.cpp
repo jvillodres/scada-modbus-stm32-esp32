@@ -239,7 +239,7 @@ static MB_StatusTypeDef verifyCRC(const uint8_t *frame, uint16_t len) {
 	if (len < 4) return MB_ERR_CRC;
 
 	uint16_t recv = (uint16_t)frame[len - 2] | ((uint16_t)frame[len - 1] << 8);
-	uint16_t calc = calculateCRC(frame, len);
+	uint16_t calc = calculateCRC(frame, len - 2);
 
 	if (recv == calc) return MB_OK;
 

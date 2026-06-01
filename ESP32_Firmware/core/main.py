@@ -17,7 +17,7 @@ registers = {
     "velocidad":    0,      # 41002 - Speed %           (analog)
     "brazo":        0,      # 41003 - Classifier arm    (digital)
     "presencia":    0,      # 41004 - Presence sensor   (digital)
-    "temperatura":  25,     # 41005 - Temperature °C    (analog)
+    "temperatura":  0,     # 41005 - Temperature °C    (analog)
     "contador":     0,      # 41006 - Counter pieces    (analog)
     "alarma":       0       # 41007 - Overheating       (analog)
 }
@@ -48,9 +48,6 @@ spi = SPI(1,
           miso=Pin(18)
           )
 cs = Pin(5, Pin.OUT)
-
-# For detecting HMI changes (Signal handled by STM32)
-drdy = Pin(4, Pin.IN)
 
 # ------------------------------------------------- Initializations ----------------------------------------------------
 cs.value(1)
@@ -184,6 +181,9 @@ async def spi_task():
         # Process RX frame from STM32
         if rx[0] == 0xBB:
             calc_crc = crc8(rx[1:9])
+            print("Registros recibidos...")
+            print(rx)
+            print("---------------------------------------------------------------------------------------------")
             if calc_crc == rx[9]:
                 registers["motor"] = rx[1]
                 registers["velocidad"] = rx[2]
@@ -192,6 +192,10 @@ async def spi_task():
                 registers["temperatura"] = rx[5]
                 registers["contador"] = (rx[6] << 8) | rx[7]
                 registers["alarma"] = rx[8]
+
+                print("Registros actualizados...")
+                print(registers)
+                print("-----------------------------------------------------------------------------------------")
 
             else:
                 print("CRC error RX: ", hex(calc_crc), "!=", hex(rx[9]))
@@ -205,6 +209,7 @@ async def main():
     """ Main function for server deploy
     :return: None
     """
+    led.toggle()
     load_html()
     init_ap()
     asyncio.create_task(spi_task())

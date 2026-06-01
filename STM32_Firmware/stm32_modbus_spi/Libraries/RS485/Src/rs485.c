@@ -39,12 +39,8 @@ void setRX() {
 HAL_StatusTypeDef sendBytes(uint8_t *data, uint16_t len, uint32_t timeout_ms) {
 	setTX();
 	HAL_UART_Transmit(&RS485_UART_PORT, data, len, timeout_ms);
+	while (__HAL_UART_GET_FLAG(&RS485_UART_PORT, UART_FLAG_TC) == RESET);
 	setRX();
-
-	uint8_t dummy;
-	for (int i = 0; i < len; i++) {
-		HAL_UART_Receive(&RS485_UART_PORT, &dummy, 1, 10);
-	}
 
 	return HAL_OK;
 }
