@@ -51,6 +51,7 @@ TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
 
 UART_HandleTypeDef huart1;
+UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 Modbus mb(0); // Master mode
@@ -64,9 +65,11 @@ static void MX_SPI1_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_TIM1_Init(void);
+static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
 static uint8_t crc8(uint8_t *data, uint8_t len);
 static void update_spi_tx_buf(void);
+static void update_uart_tx_buf(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -77,23 +80,45 @@ uint16_t mb_regs[NUM_REGS] = {0};
 // SPI Buffers
 uint8_t spi_rx_buf[10] = {0};
 uint8_t spi_tx_buf[10] = {
-		0xBB,		// Start byte
+		0xBB,		// Start byte (ID)
 		0x00,		// Motor
 		0x00,		// Speed
 		0x00,		// Arm
-		0x00,		// Presence		(Emulated ON)
-		0x00,		// Temperature 	(Emulated 40°C)
+		0x00,		// Presence
+		0x00,		// Temperature
 		0x00,		// Counter Hi
-		0x00,		// Counter Lo	(Emulated 5 pieces)
-		0x00,		// Alarm		(Emulated OFF)
-		0x00		// CRC
+		0x00,		// Counter Lo
+		0x00,		// Alarm
+		0x00		// CRC8
+};
+
+// UART Buffers
+uint8_t uart_rx_buf[10] = {0};
+uint8_t uart_tx_buf[10] = {
+		0xDD,		// Start byte (ID)
+		0x00,		// Motor
+		0x00,		// Speed
+		0x00,		// Arm
+		0x00,		// Presence
+		0x00,		// Temperature
+		0x00,		// Counter Hi
+		0x00,		// Counter Lo
+		0x00,		// Alarm
+		0x00		// CRC8
 };
 
 // Pending changes from SCADA to PLC
-volatile uint8_t pending_flag = 0x00;
-volatile uint8_t pending_motor = 0x00;
-volatile uint8_t pending_speed = 0x00;
-volatile uint8_t pending_arm = 0x00;
+volatile uint8_t scada_pending_flag = 0x00; // Flag
+volatile uint8_t scada_pending_motor = 0x00; // Value queued
+volatile uint8_t scada_pending_speed = 0x00;
+volatile uint8_t scada_pending_arm = 0x00;
+
+// Pending changes from HMI to PLC
+volatile uint8_t hmi_pending_flag = 0x00; // Flag
+volatile uint8_t hmi_pending_motor = 0x00; // Value queued
+volatile uint8_t hmi_pending_speed = 0x00;
+volatile uint8_t hmi_pending_arm = 0x00;
+volatile uint8_t hmi_frame_ready = 0x00; // Receive flag
 /* USER CODE END 0 */
 
 /**
@@ -130,12 +155,16 @@ int main(void)
   MX_TIM2_Init();
   MX_USART1_UART_Init();
   MX_TIM1_Init();
+  MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_Base_Start_IT(&htim1);
   HAL_TIM_Base_Start_IT(&htim2);
 
   spi_tx_buf[9] = crc8(&spi_tx_buf[1], 8);
   HAL_SPI_TransmitReceive_IT(&hspi1, spi_tx_buf, spi_rx_buf, 10);
+
+  uart_tx_buf[9] = crc8(&uart_tx_buf[1], 8);
+  HAL_UART_Receive_IT(&huart2, uart_rx_buf, 10);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -143,29 +172,68 @@ int main(void)
   uint32_t now = HAL_GetTick();
   while (1)
   {
+	if (hmi_frame_ready) {
+		hmi_frame_ready = 0x00;
+
+		if (uart_rx_buf[0] == 0xCC) {
+			uint8_t calc = crc8(&uart_rx_buf[1], 8);
+
+			if (calc == uart_rx_buf[9]) {
+				if (uart_rx_buf[1] != 0xFF) hmi_pending_motor = uart_rx_buf[1]; // Motor
+				if (uart_rx_buf[2] != 0xFF) hmi_pending_speed = uart_rx_buf[2]; // Speed
+				if (uart_rx_buf[3] != 0xFF) hmi_pending_arm = uart_rx_buf[3]; // Arm
+
+				if (uart_rx_buf[1] != 0xFF || uart_rx_buf[2] != 0xFF || uart_rx_buf[3] != 0xFF) {
+					hmi_pending_flag = 0x01;
+				}
+
+				update_uart_tx_buf();
+				HAL_StatusTypeDef st = HAL_UART_Transmit(&huart2, uart_tx_buf, 10, 100);
+
+			}
+		}
+	}
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
 	if ((HAL_GetTick() - now) >= 200) {
 		now = HAL_GetTick();
-		if (pending_flag) {
-			uint16_t val;
+		uint16_t val;
 
-			if (pending_motor != 0xFF) {
-				val = pending_motor;
+		if (hmi_pending_flag) {
+			if (hmi_pending_motor != 0xFF) {
+				val = hmi_pending_motor;
 				mb.sendFC(SLAVE_ADDR, MB_FC_WRITE_SINGLE, 0, 1, 0, &val);
 			}
-			if (pending_speed != 0xFF) {
-				val = pending_speed;
+			if (hmi_pending_speed != 0xFF) {
+				val = hmi_pending_speed;
 				mb.sendFC(SLAVE_ADDR, MB_FC_WRITE_SINGLE, 0, 1, 1, &val);
 			}
-			if (pending_arm != 0xFF) {
-				val = pending_arm;
+			if (hmi_pending_arm != 0xFF) {
+				val = hmi_pending_arm;
 				mb.sendFC(SLAVE_ADDR, MB_FC_WRITE_SINGLE, 0, 1, 2, &val);
 			}
 
-			pending_motor = pending_speed = pending_arm = 0xFF;
-			pending_flag = 0x00;
+			hmi_pending_motor = hmi_pending_speed = hmi_pending_arm = 0xFF;
+			hmi_pending_flag = 0x00;
+		}
+
+		if (scada_pending_flag) {
+			if (scada_pending_motor != 0xFF) {
+				val = scada_pending_motor;
+				mb.sendFC(SLAVE_ADDR, MB_FC_WRITE_SINGLE, 0, 1, 0, &val);
+			}
+			if (scada_pending_speed != 0xFF) {
+				val = scada_pending_speed;
+				mb.sendFC(SLAVE_ADDR, MB_FC_WRITE_SINGLE, 0, 1, 1, &val);
+			}
+			if (scada_pending_arm != 0xFF) {
+				val = scada_pending_arm;
+				mb.sendFC(SLAVE_ADDR, MB_FC_WRITE_SINGLE, 0, 1, 2, &val);
+			}
+
+			scada_pending_motor = scada_pending_speed = scada_pending_arm = 0xFF;
+			scada_pending_flag = 0x00;
 		}
 
 		MB_StatusTypeDef st = mb.sendFC(SLAVE_ADDR, MB_FC_READ_REGS, 0, NUM_REGS, 0, mb_regs);
@@ -407,6 +475,39 @@ static void MX_USART1_UART_Init(void)
 }
 
 /**
+  * @brief USART2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART2_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART2_Init 0 */
+
+  /* USER CODE END USART2_Init 0 */
+
+  /* USER CODE BEGIN USART2_Init 1 */
+
+  /* USER CODE END USART2_Init 1 */
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 9600;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART2_Init 2 */
+
+  /* USER CODE END USART2_Init 2 */
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -476,6 +577,25 @@ static void update_spi_tx_buf(void) {
 	HAL_NVIC_EnableIRQ(SPI1_IRQn);
 }
 
+static void update_uart_tx_buf(void) {
+	uint8_t tmp[10];
+
+	tmp[0] = 0xDD;
+	tmp[1] = (uint8_t) mb_regs[0];				// motor
+	tmp[2] = (uint8_t) mb_regs[1];				// speed
+	tmp[3] = (uint8_t) mb_regs[2];				// arm
+	tmp[4] = (uint8_t) mb_regs[3];				// presence
+	tmp[5] = (uint8_t) mb_regs[4];				// temperature
+	tmp[6] = (uint8_t) (mb_regs[5] >> 8);		// count hi
+	tmp[7] = (uint8_t) (mb_regs[5] & 0xFF);		// count lo
+	tmp[8] = (uint8_t) mb_regs[6];				// overheat
+	tmp[9] = crc8(&tmp[1], 8);
+
+	HAL_NVIC_DisableIRQ(USART2_IRQn);
+	memcpy(uart_tx_buf, tmp, 10);
+	HAL_NVIC_EnableIRQ(USART2_IRQn);
+}
+
 void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi) {
 	if (hspi->Instance == SPI1) {
 
@@ -485,18 +605,25 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi) {
 
 			if (calc == spi_rx_buf[9]) {
 
-				if (spi_rx_buf[1] != 0xFF) pending_motor = spi_rx_buf[1]; // Motor
-				if (spi_rx_buf[2] != 0xFF) pending_speed = spi_rx_buf[2]; // Speed
-				if (spi_rx_buf[3] != 0xFF) pending_arm = spi_rx_buf[3]; // Arm
+				if (spi_rx_buf[1] != 0xFF) scada_pending_motor = spi_rx_buf[1]; // Motor
+				if (spi_rx_buf[2] != 0xFF) scada_pending_speed = spi_rx_buf[2]; // Speed
+				if (spi_rx_buf[3] != 0xFF) scada_pending_arm = spi_rx_buf[3]; // Arm
 
 				if (spi_rx_buf[1] != 0xFF || spi_rx_buf[2] != 0xFF || spi_rx_buf[3] != 0xFF) {
-					pending_flag = 0x01;
+					scada_pending_flag = 0x01;
 				}
 			}
 		}
 
 		// Recalculate CRC and arm next transaction
 		HAL_SPI_TransmitReceive_IT(&hspi1, spi_tx_buf, spi_rx_buf, 10);
+	}
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+	if (huart->Instance == USART2) {
+		hmi_frame_ready = 0x01;
+		HAL_UART_Receive_IT(&huart2, uart_rx_buf, 10);
 	}
 }
 
