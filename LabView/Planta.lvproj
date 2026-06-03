@@ -14,6 +14,7 @@
 		<Property Name="specify.custom.address" Type="Bool">false</Property>
 		<Item Name="Banda_HMI.vi" Type="VI" URL="../Banda_HMI.vi"/>
 		<Item Name="Banda_HMI_Test_Bidir.vi" Type="VI" URL="../Banda_HMI_Test_Bidir.vi"/>
+		<Item Name="Banda_HMI_UART.vi" Type="VI" URL="../Banda_HMI_UART.vi"/>
 		<Item Name="Dependencies" Type="Dependencies"/>
 		<Item Name="Build Specifications" Type="Build"/>
 	</Item>

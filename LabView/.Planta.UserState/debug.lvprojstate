@@ -14,5 +14,38 @@
         </Generic>
       </Probes>
     </VI>
+    <VI name="Banda_HMI_UART.vi">
+      <Breakpoints>
+        <NodeIndexes>
+        </NodeIndexes>
+        <SignalIndexes>
+        </SignalIndexes>
+      </Breakpoints>
+      <Probes>
+        <Generic>
+          <SignalUID value="1583"/>
+          <SignalUID value="1148"/>
+          <SignalUID value="1589"/>
+          <SignalUID value="1283"/>
+          <SignalUID value="2182"/>
+          <SignalUID value="2828"/>
+          <SignalUID value="1444"/>
+          <SignalUID value="188"/>
+          <SignalUID value="1436"/>
+          <SignalUID value="3894"/>
+          <SignalUID value="1220"/>
+          <SignalUID value="448"/>
+          <SignalUID value="4980"/>
+          <SignalUID value="4976"/>
+          <SignalUID value="65"/>
+          <SignalUID value="4373"/>
+          <SignalUID value="4409"/>
+          <SignalUID value="4437"/>
+          <SignalUID value="4395"/>
+          <SignalUID value="3115"/>
+          <SignalUID value="3914"/>
+        </Generic>
+      </Probes>
+    </VI>
   </Target>
 </Configuration>
